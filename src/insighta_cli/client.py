@@ -10,7 +10,12 @@ from typing import Any
 
 import httpx
 
-from .credentials import Credentials, delete_credentials, update_tokens
+from .credentials import (
+    Credentials,
+    delete_credentials,
+    load_credentials,
+    update_tokens,
+)
 
 API_VERSION = "1"
 
@@ -173,8 +178,6 @@ class APIClient:
 
 def require_session() -> Credentials:
     """Load credentials or raise NotAuthenticated."""
-    from .credentials import load_credentials
-
     creds = load_credentials()
     if creds is None:
         raise NotAuthenticated("Not logged in. Run `insighta login` first.")

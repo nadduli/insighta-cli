@@ -59,8 +59,14 @@ h1{font-weight:500}</style></head><body>
 </body></html>"""
 
 
-def _capture_callback(port: int, timeout: float = 300.0) -> dict:
-    """Run a one-shot HTTP server on 127.0.0.1:port until /callback fires."""
+def _start_callback_server(
+    port: int,
+) -> tuple[ThreadingHTTPServer, dict, threading.Event]:
+    """Bind the loopback callback server and start serving in a background thread.
+
+    Returns (server, captured_dict, done_event). The dict is populated by the
+    request handler when /callback fires; done_event is set at that point.
+    """
     captured: dict = {}
     done = threading.Event()
 
@@ -85,16 +91,16 @@ def _capture_callback(port: int, timeout: float = 300.0) -> dict:
         def log_message(self, *args, **kwargs):
             return  # silence default access logging
 
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
     try:
-        if not done.wait(timeout=timeout):
-            raise AuthError("Timed out waiting for GitHub callback.")
-    finally:
-        server.shutdown()
-        server.server_close()
-    return captured
+        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    except OSError as e:
+        raise AuthError(
+            f"Could not bind 127.0.0.1:{port} — is another `insighta login` "
+            f"already running? ({e})"
+        )
+
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, captured, done
 
 
 def _exchange_with_backend(
@@ -144,17 +150,24 @@ def run_login_flow(config: Config) -> dict:
         challenge=challenge,
     )
 
-    # Open the browser BEFORE starting the server only to surface failures
-    # earlier; we still need the server running to catch the redirect, so
-    # in practice we open after the server is ready below.
-    captured: dict = {}
+    # Bind the callback server BEFORE opening the browser, otherwise GitHub's
+    # redirect can race the server bind on a fast network or pre-authorized app.
+    server, captured, done = _start_callback_server(config.callback_port)
+    try:
+        opened = webbrowser.open(authorize_url, new=2)
+        if not opened:
+            # Some environments (SSH, headless CI) have no browser. Print the
+            # URL so the user can paste it manually into a browser elsewhere.
+            print(
+                "Could not auto-open a browser. Open this URL to continue:\n  "
+                + authorize_url
+            )
 
-    def _open_browser():
-        webbrowser.open(authorize_url, new=2)
-
-    # Bring up the server, then nudge the browser, then block on capture.
-    _open_browser()
-    captured = _capture_callback(config.callback_port)
+        if not done.wait(timeout=300.0):
+            raise AuthError("Timed out waiting for GitHub callback.")
+    finally:
+        server.shutdown()
+        server.server_close()
 
     if captured.get("error"):
         raise AuthError(f"GitHub denied authorization: {captured['error']}")

@@ -49,14 +49,15 @@ def logout() -> None:
         console.print("[dim]No active session.[/]")
         return
 
-    # Best-effort server-side revoke. If the network's down, still clear locally.
+    # Best-effort server-side revoke. If the network's down or the token is
+    # already invalid, still clear locally — logout must always succeed.
     with APIClient(creds) as client:
         try:
             client.post_json(
                 "/auth/logout",
                 json_body={"refresh_token": creds.refresh_token},
             )
-        except (APIError, NotAuthenticated, Exception):
+        except Exception:
             pass
 
     delete_credentials()

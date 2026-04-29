@@ -206,9 +206,12 @@ def export(
                     raise APIError(response.status_code, body)
 
                 target = output or Path.cwd() / _filename_from_headers(response.headers)
-                with target.open("wb") as f:
-                    for chunk in response.iter_bytes():
-                        f.write(chunk)
+                try:
+                    with target.open("wb") as f:
+                        for chunk in response.iter_bytes():
+                            f.write(chunk)
+                except OSError as e:
+                    raise APIError(0, f"Could not write {target}: {e}")
                 return target
             finally:
                 response.close()
