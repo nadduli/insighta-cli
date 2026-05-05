@@ -144,6 +144,42 @@ class APIClient:
             raise APIError(response.status_code, _extract_error_message(response))
         return response.json()
 
+    def upload_file(self, url: str, file_path) -> dict:
+        """POST a multipart/form-data file upload. Used by `profiles upload`.
+
+        httpx streams the file from disk via the file handle, so a 50MB
+        CSV doesn't all sit in memory. On 401, the file handle is reopened
+        for the retry — File objects can't be safely re-sent after the
+        first read.
+        """
+        from pathlib import Path
+
+        path = Path(file_path)
+
+        def _do_upload(token: str) -> httpx.Response:
+            with path.open("rb") as f:
+                files = {"file": (path.name, f, "text/csv")}
+                return self._client.post(
+                    url,
+                    files=files,
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+
+        response = _do_upload(self._creds.access_token)
+
+        if response.status_code == 401:
+            if not self._refresh_tokens():
+                delete_credentials()
+                raise NotAuthenticated(
+                    "Session expired. Run `insighta login` again."
+                )
+            response = _do_upload(self._creds.access_token)
+
+        if response.status_code >= 400:
+            raise APIError(response.status_code, _extract_error_message(response))
+
+        return response.json()
+
     def stream(self, method: str, url: str, *, params: dict | None = None):
         """Open a streaming request for downloads (e.g. CSV export).
 

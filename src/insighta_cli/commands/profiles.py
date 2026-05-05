@@ -14,6 +14,7 @@ from ..output import (
     render_pagination_footer,
     render_profile_detail,
     render_profiles_table,
+    render_upload_summary,
     spinner,
 )
 
@@ -161,6 +162,45 @@ def create(
     else:
         print_success(f"Created profile {profile.get('id')} for {profile.get('name')}.")
     render_profile_detail(profile)
+
+
+@app.command()
+def upload(
+    file_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="Path to the CSV file to upload",
+    ),
+) -> None:
+    """Bulk-upload profiles from a CSV file (admin only).
+
+    The file is streamed to the backend — large CSVs (up to 500K rows
+    per spec) don't all sit in memory client-side or server-side. Bad
+    rows are skipped with a per-reason breakdown in the response;
+    duplicate names are deduped server-side.
+
+    Required columns: name, gender, age, country_id.
+    Optional (auto-derived if absent): age_group, country_name,
+    gender_probability, country_probability.
+    """
+    if file_path.suffix.lower() != ".csv":
+        print_error("Expected a .csv file.")
+        raise typer.Exit(2)
+
+    creds = require_session()
+
+    size_mb = file_path.stat().st_size / 1024 / 1024
+    label = f"Uploading {file_path.name} ({size_mb:.1f} MB)"
+
+    def call():
+        with APIClient(creds) as client, spinner(label):
+            return client.upload_file("/api/profiles/upload", file_path)
+
+    body = _run(call)
+    render_upload_summary(body)
 
 
 @app.command()

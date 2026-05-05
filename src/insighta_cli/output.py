@@ -82,3 +82,39 @@ def render_pagination_footer(meta: dict) -> None:
         f"[dim]Page {page}/{total_pages} — {total} matching profile"
         f"{'s' if total != 1 else ''}.[/]"
     )
+
+
+def render_upload_summary(body: dict) -> None:
+    """Render the result of POST /api/profiles/upload as a tidy summary.
+
+    Mirrors the web portal's upload-result card so the CLI experience is
+    consistent with the web one — same numbers, same per-reason breakdown.
+    """
+    total = body.get("total_rows", 0)
+    inserted = body.get("inserted", 0)
+    skipped = body.get("skipped", 0)
+
+    console.print(
+        f"\n[bold green]✓[/] Processed [bold]{total:,}[/] rows from CSV."
+    )
+
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column(style="bold cyan", no_wrap=True)
+    table.add_column(justify="right")
+    table.add_row("Total rows", f"{total:,}")
+    table.add_row("Inserted", f"[green]{inserted:,}[/]")
+    table.add_row(
+        "Skipped",
+        f"[yellow]{skipped:,}[/]" if skipped else "[dim]0[/]",
+    )
+    console.print(table)
+
+    reasons = body.get("reasons") or {}
+    if reasons:
+        console.print("\n[bold cyan]Skip reasons[/]")
+        reasons_table = Table(show_header=False, box=None, padding=(0, 2))
+        reasons_table.add_column(style="dim")
+        reasons_table.add_column(justify="right")
+        for reason, count in sorted(reasons.items(), key=lambda x: -x[1]):
+            reasons_table.add_row(reason.replace("_", " "), f"{count:,}")
+        console.print(reasons_table)

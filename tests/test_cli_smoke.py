@@ -24,7 +24,7 @@ def test_root_help_lists_commands():
 def test_profiles_help_lists_subcommands():
     result = runner.invoke(app, ["profiles", "--help"])
     assert result.exit_code == 0
-    for cmd in ("list", "get", "search", "create", "export"):
+    for cmd in ("list", "get", "search", "create", "export", "upload"):
         assert cmd in result.stdout
 
 

@@ -62,6 +62,10 @@ insighta profiles get <id>                                        # single profi
 insighta profiles search "young males from nigeria"               # NL query
 insighta profiles create --name "Harriet Tubman"                  # admin only
 
+insighta profiles upload ./profiles.csv                           # admin only — bulk import
+                                                                  # streams the file, skips bad rows,
+                                                                  # prints a per-reason summary
+
 insighta profiles export --format csv                             # → ./profiles_<timestamp>.csv
 insighta profiles export --format csv --gender male --country NG
 insighta profiles export --format csv -o /tmp/profiles.csv        # custom path
